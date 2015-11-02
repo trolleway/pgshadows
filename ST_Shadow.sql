@@ -14,6 +14,8 @@ DECLARE
   footprint geometry;
   shadow geometry;
   shadow_poly geometry;
+  nearshadow geometry;
+  nearshadow_poly geometry;
   result geometry;
 
   x decimal;
@@ -29,13 +31,18 @@ DECLARE
 
 BEGIN
   sun_pos = suncalc(date, ST_Centroid(geom));
+
+  
     
   IF sun_pos.y < 0 THEN
     RETURN NULL;
   END IF;
 
+
+
   sun_vector.x = COS(sun_pos.x) / TAN(sun_pos.y);
   sun_vector.y = SIN(sun_pos.x) / TAN(sun_pos.y);
+
 
   poly = ST_GeometryN(geom, 1);
 
@@ -47,8 +54,14 @@ BEGIN
 
   footprint   = ST_Transform(ST_ExteriorRing(poly), 900913);
   shadow      = ST_Translate(footprint, sun_vector.x*height, sun_vector.y*height);
-  shadow_poly = ST_MakePolygon(shadow);
+
+
+  nearshadow      = ST_Translate(footprint, sun_vector.x*1.0, sun_vector.y*1.0);	-- Shadow, moved for 1 meter - for case, when height more than building width.
+  nearshadow_poly = ST_MakePolygon(nearshadow);
+  
   result      = ST_GeomFromText('LINESTRING(0 0, 1 1)', 900913);
+
+
 
   FOR i IN 0..ST_NPoints(footprint)-2 LOOP
     f1 = ST_PointN(footprint, i+1);
@@ -56,12 +69,13 @@ BEGIN
     s1 = ST_PointN(shadow, i+1);
     s2 = ST_PointN(shadow, i+2);
 
-    IF ST_Contains(shadow_poly, f1) THEN
+
+    IF ST_Contains(nearshadow_poly, f1) THEN
       result = ST_AddPoint(result, s1);
       result = ST_AddPoint(result, s2);
     ELSE
       result = ST_AddPoint(result, f1);
-      IF ST_Contains(shadow_poly, f2) THEN
+      IF ST_Contains(nearshadow_poly, f2) THEN
 	result = ST_AddPoint(result, s1);
       END IF;
     END IF;
@@ -72,6 +86,7 @@ BEGIN
   result = ST_AddPoint(result, ST_PointN(result, 1));
 
   RETURN ST_Transform(ST_MakePolygon(result), poly_srid);
+
 END;
 
 $$ LANGUAGE plpgsql;
